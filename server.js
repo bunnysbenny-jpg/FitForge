@@ -4,7 +4,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
-
+const { createClient } = require("@supabase/supabase-js");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
@@ -14,7 +14,10 @@ if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET || !pro
   console.warn("Missing STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET or SESSION_SECRET environment variable.");
 }
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_missing");
-
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 const dataDir = path.join(__dirname, "data");
 fs.mkdirSync(dataDir, {recursive:true});
 const dbFile = path.join(dataDir, "users.json");
