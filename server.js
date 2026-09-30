@@ -18,114 +18,374 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-const dataDir = path.join(__dirname, "data");
-fs.mkdirSync(dataDir, {recursive:true});
-const dbFile = path.join(dataDir, "users.json");
-let users = fs.existsSync(dbFile) ? JSON.parse(fs.readFileSync(dbFile, "utf8")) : [];
-
-function save(){ fs.writeFileSync(dbFile, JSON.stringify(users, null, 2)); }
-function normalizeEmail(e){ return String(e || "").trim().toLowerCase(); }
-function findUser(email){ return users.find(u => u.email === normalizeEmail(email)); }
-function setSession(res, user){
-  const token = jwt.sign({id:user.id}, process.env.SESSION_SECRET, {expiresIn:"7d"});
-  res.cookie("fitforge_session", token, {httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",maxAge:7*24*60*60*1000});
+function normalizeEmail(e){
+  return String(e || "").trim().toLowerCase();
 }
-function currentUser(req){
+
+function mapUser(row){
+  if(!row) return null;
+
+  return {
+    id: row.id,
+    email: row.email,
+    passwordHash: row.password_hash,
+    subscriptionStatus: row.subscription_status,
+    stripeCustomerId: row.stripe_customer_id,
+    stripeSubscriptionId: row.stripe_subscription_id,
+    createdAt: row.created_at
+  };
+}
+
+async function findUser(email){
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("email", normalizeEmail(email))
+    .maybeSingle();
+
+  if(error) throw error;
+
+  return mapUser(data);
+}
+
+async function updateUser(id, updates){
+  const dbUpdates = {};
+
+  if(updates.subscriptionStatus !== undefined)
+    dbUpdates.subscription_status = updates.subscriptionStatus;
+
+  if(updates.stripeCustomerId !== undefined)
+    dbUpdates.stripe_customer_id = updates.stripeCustomerId;
+
+  if(updates.stripeSubscriptionId !== undefined)
+    dbUpdates.stripe_subscription_id = updates.stripeSubscriptionId;
+
+  const { data, error } = await supabase
+    .from("users")
+    .update(dbUpdates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if(error) throw error;
+
+  return mapUser(data);
+}
+
+function setSession(res, user){
+  const token = jwt.sign(
+    {id: user.id},
+    process.env.SESSION_SECRET,
+    {expiresIn:"7d"}
+  );
+
+  res.cookie("fitforge_session", token, {
+    httpOnly:true,
+    secure:process.env.NODE_ENV === "production",
+    sameSite:"lax",
+    maxAge:7*24*60*60*1000
+  });
+}
+
+async function currentUser(req){
   try {
     const token = req.cookies?.fitforge_session;
     if(!token) return null;
-    const payload = jwt.verify(token, process.env.SESSION_SECRET);
-    return users.find(u => u.id === payload.id) || null;
-  } catch { return null; }
-}
-function requireLogin(req,res,next){
-  const u=currentUser(req); if(!u) return res.redirect("/login"); req.user=u; next();
-}
-function requireActive(req,res,next){
-  const u=currentUser(req); if(!u) return res.redirect("/login");
-  if(u.subscriptionStatus !== "active" && u.subscriptionStatus !== "trialing") return res.redirect("/account?needsPayment=1");
-  req.user=u; next();
+
+    const payload = jwt.verify(
+      token,
+      process.env.SESSION_SECRET
+    );
+
+    const {data, error} = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", payload.id)
+      .maybeSingle();
+
+    if(error) throw error;
+
+    return mapUser(data);
+  } catch {
+    return null;
+  }
 }
 
-// Stripe webhook MUST use raw body before express.json().
+async function requireLogin(req,res,next){
+  const u = await currentUser(req);
+
+  if(!u) return res.redirect("/login");
+
+  req.user = u;
+  next();
+}
+
+async function requireActive(req,res,next){
+  const u = await currentUser(req);
+
+  if(!u) return res.redirect("/login");
+
+  if(
+    u.subscriptionStatus !== "active" &&
+    u.subscriptionStatus !== "trialing"
+  ){
+    return res.redirect("/account?needsPayment=1");
+  }
+
+  req.user = u;
+  next();
+}
+
+app.get("/", (req,res)=>res.send(publicPage));
+
+app.get("/signup",(req,res)=>res.send(signupPage));
+
+app.post("/signup", async (req,res)=>{
+  try {
+    const email = normalizeEmail(req.body.email);
+    const password = String(req.body.password || "");
+
+    if(!email || password.length < 8){
+      return res.status(400).send(
+        "Use a valid email and a password of at least 8 characters. <a href='/signup'>Back</a>"
+      );
+    }
+
+    const existing = await findUser(email);
+
+    if(existing){
+      return res.status(409).send(
+        "An account already exists for that email. <a href='/login'>Log in</a>"
+      );
+    }
+
+    const userId = require("crypto").randomUUID();
+    const passwordHash = await bcrypt.hash(password,12);
+
+    const {data, error} = await supabase
+      .from("users")
+      .insert({
+        id:userId,
+        email,
+        password_hash:passwordHash,
+        subscription_status:"inactive"
+      })
+      .select()
+      .single();
+
+    if(error) throw error;
+
+    const user = mapUser(data);
+
+    setSession(res,user);
+    res.redirect("/account");
+
+  } catch(e) {
+    console.error(e);
+    res.status(500).send("Could not create account.");
+  }
+});
+
+app.get("/login",(req,res)=>res.send(loginPage));
+
+app.post("/login", async (req,res)=>{
+  try {
+    const user = await findUser(req.body.email);
+
+    if(
+      !user ||
+      !(await bcrypt.compare(
+        String(req.body.password || ""),
+        user.passwordHash
+      ))
+    ){
+      return res.status(401).send(
+        "Incorrect email or password. <a href='/login'>Try again</a>"
+      );
+    }
+
+    setSession(res,user);
+    res.redirect("/account");
+
+  } catch(e) {
+    console.error(e);
+    res.status(500).send("Login failed.");
+  }
+});
+
+app.get("/logout",(req,res)=>{
+  res.clearCookie("fitforge_session");
+  res.redirect("/");
+});
+
+app.get("/account", requireLogin, (req,res)=>{
+  const paid =
+    req.user.subscriptionStatus === "active" ||
+    req.user.subscriptionStatus === "trialing";
+
+  res.send(`<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width">
+<title>FitForge Account</title>
+<style>
+body{
+  font-family:system-ui;
+  background:#0b0d12;
+  color:#fff;
+  padding:24px
+}
+.box{
+  max-width:600px;
+  margin:40px auto;
+  background:#151922;
+  border:1px solid #252b38;
+  border-radius:20px;
+  padding:28px
+}
+a,button{
+  display:inline-block;
+  padding:14px 18px;
+  border-radius:12px;
+  background:#7c5cff;
+  color:#fff;
+  text-decoration:none;
+  font-weight:800;
+  margin:7px 5px 0 0
+}
+.secondary{
+  background:#303746
+}
+.status{
+  padding:14px;
+  border-radius:12px;
+  background:#0e1118;
+  margin:15px 0;
+  color:#cbd1de
+}
+</style>
+</head>
+
+<body>
+<div class="box">
+
+<h1>Your FitForge account</h1>
+
+<p>${req.user.email}</p>
+
+<div class="status">
+Subscription:
+<strong>${paid ? "Active" : "Not active"}</strong>
+</div>
+
+${
+  paid
+  ? `<a href="/workouts">Open workout library</a>`
+  : `<p>Subscribe for $1.99/month to unlock the workout library.</p>
+     <a href="${STRIPE_PAYMENT_LINK}">Subscribe — $1.99/month</a>`
+}
+
+<a class="secondary" href="/logout">Log out</a>
+
+</div>
+</body>
+</html>`);
+});
+
+app.get("/subscribe", requireLogin, (req,res)=>{
+  res.redirect(STRIPE_PAYMENT_LINK);
+});
+
+app.get("/workouts", requireActive, (req,res)=>{
+  res.send(workoutsPage);
+});
+
+
 app.post("/stripe/webhook", express.raw({type:"application/json"}), async (req,res)=>{
   let event;
+
   try {
-    event = stripe.webhooks.constructEvent(req.body, req.headers["stripe-signature"], process.env.STRIPE_WEBHOOK_SECRET);
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      req.headers["stripe-signature"],
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
   } catch(e) {
     return res.status(400).send(`Webhook Error: ${e.message}`);
   }
 
   try {
-    if(event.type === "checkout.session.completed") {
+    if(event.type === "checkout.session.completed"){
       const session = event.data.object;
-      const email = normalizeEmail(session.customer_details?.email || session.customer_email);
-      const user = findUser(email);
+
+      const email = normalizeEmail(
+        session.customer_details?.email ||
+        session.customer_email
+      );
+
+      const user = await findUser(email);
+
       if(user){
-        user.subscriptionStatus = "active";
-        user.stripeCustomerId = session.customer || user.stripeCustomerId;
-        user.stripeSubscriptionId = session.subscription || user.stripeSubscriptionId;
-        save();
+        await updateUser(user.id, {
+          subscriptionStatus:"active",
+          stripeCustomerId:
+            session.customer || user.stripeCustomerId,
+          stripeSubscriptionId:
+            session.subscription || user.stripeSubscriptionId
+        });
       }
     }
 
-    if(event.type === "customer.subscription.updated" || event.type === "customer.subscription.created" || event.type === "customer.subscription.deleted"){
+    if(
+      event.type === "customer.subscription.updated" ||
+      event.type === "customer.subscription.created" ||
+      event.type === "customer.subscription.deleted"
+    ){
       const sub = event.data.object;
-      let user = users.find(u => u.stripeCustomerId === sub.customer);
+
+      const {data, error} = await supabase
+        .from("users")
+        .select("*")
+        .eq("stripe_customer_id", sub.customer)
+        .maybeSingle();
+
+      if(error) throw error;
+
+      let user = mapUser(data);
+
       if(!user && sub.customer){
         try {
           const customer = await stripe.customers.retrieve(sub.customer);
-          if(!customer.deleted) user = findUser(customer.email);
+
+          if(!customer.deleted && customer.email){
+            user = await findUser(customer.email);
+          }
         } catch {}
       }
+
       if(user){
-        user.stripeCustomerId = sub.customer;
-        user.stripeSubscriptionId = sub.id;
-        user.subscriptionStatus = sub.status;
-        save();
+        await updateUser(user.id, {
+          stripeCustomerId:sub.customer,
+          stripeSubscriptionId:sub.id,
+          subscriptionStatus:sub.status
+        });
       }
     }
+
     res.json({received:true});
+
   } catch(e) {
     console.error(e);
     res.status(500).send("Webhook processing failed");
   }
 });
-
 app.use(express.urlencoded({extended:false}));
 app.use(express.json());
 app.use(require("cookie-parser")());
 
-app.get("/", (req,res)=>res.send(publicPage));
-app.get("/signup",(req,res)=>res.send(signupPage));
-app.post("/signup", async (req,res)=>{
-  const email=normalizeEmail(req.body.email), password=String(req.body.password||"");
-  if(!email || password.length<8) return res.status(400).send("Use a valid email and a password of at least 8 characters. <a href='/signup'>Back</a>");
-  if(findUser(email)) return res.status(409).send("An account already exists for that email. <a href='/login'>Log in</a>");
-  const user={id:require("crypto").randomUUID(),email,passwordHash:await bcrypt.hash(password,12),subscriptionStatus:"inactive",createdAt:new Date().toISOString()};
-  users.push(user); save(); setSession(res,user); res.redirect("/account");
-});
-app.get("/login",(req,res)=>res.send(loginPage));
-app.post("/login", async (req,res)=>{
-  const user=findUser(req.body.email);
-  if(!user || !(await bcrypt.compare(String(req.body.password||""),user.passwordHash))) return res.status(401).send("Incorrect email or password. <a href='/login'>Try again</a>");
-  setSession(res,user); res.redirect("/account");
-});
-app.get("/logout",(req,res)=>{res.clearCookie("fitforge_session");res.redirect("/");});
 
-app.get("/account", requireLogin, (req,res)=>{
-  const paid=req.user.subscriptionStatus==="active"||req.user.subscriptionStatus==="trialing";
-  res.send(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><title>FitForge Account</title>
-  <style>body{font-family:system-ui;background:#0b0d12;color:#fff;padding:24px}.box{max-width:600px;margin:40px auto;background:#151922;border:1px solid #252b38;border-radius:20px;padding:28px}a,button{display:inline-block;padding:14px 18px;border-radius:12px;background:#7c5cff;color:#fff;text-decoration:none;font-weight:800;margin:7px 5px 0 0}.secondary{background:#303746}.status{padding:14px;border-radius:12px;background:#0e1118;margin:15px 0;color:#cbd1de}</style></head><body><div class="box">
-  <h1>Your FitForge account</h1><p>${req.user.email}</p>
-  <div class="status">Subscription: <strong>${paid ? "Active" : "Not active"}</strong></div>
-  ${paid ? `<a href="/workouts">Open workout library</a>` : `<p>Subscribe for $1.99/month to unlock the workout library.</p><a href="${STRIPE_PAYMENT_LINK}">Subscribe — $1.99/month</a>`}
-  <a class="secondary" href="/logout">Log out</a></div></body></html>`);
-});
+  
 
-app.get("/subscribe", requireLogin, (req,res)=>res.redirect(STRIPE_PAYMENT_LINK));
-
-app.get("/workouts", requireActive, (req,res)=>res.send(workoutsPage));
 
 const publicPage = `<!doctype html>
 <html lang="en">
