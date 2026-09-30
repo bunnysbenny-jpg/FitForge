@@ -135,7 +135,9 @@ async function requireActive(req,res,next){
   req.user = u;
   next();
 }
-
+app.use(express.urlencoded({extended:false}));
+app.use(express.json());
+app.use(require("cookie-parser")());
 app.get("/", (req,res)=>res.send(publicPage));
 
 app.get("/signup",(req,res)=>res.send(signupPage));
@@ -379,9 +381,7 @@ app.post("/stripe/webhook", express.raw({type:"application/json"}), async (req,r
     res.status(500).send("Webhook processing failed");
   }
 });
-app.use(express.urlencoded({extended:false}));
-app.use(express.json());
-app.use(require("cookie-parser")());
+
 
 
   
