@@ -135,12 +135,12 @@ async function requireActive(req,res,next){
   req.user = u;
   next();
 }
-app.use(express.urlencoded({extended:false}));
-app.use((req, res, next) => {
-  if (req.path === "/stripe/webhook") return next();
-  express.json()(req, res, next);
-});
 app.use(require("cookie-parser")());
+
+app.use("/stripe/webhook", express.raw({type:"application/json"}));
+
+app.use(express.urlencoded({extended:false}));
+app.use(express.json());
 app.get("/", (req,res)=>res.send(publicPage));
 
 app.get("/signup",(req,res)=>res.send(signupPage));
@@ -304,12 +304,12 @@ app.get("/subscribe", requireLogin, (req,res)=>{
 app.get("/workouts", requireActive, (req,res)=>{
   res.send(workoutsPage);
 });
-
-
-app.post("/stripe/webhook", express.raw({type:"application/json"}), async (req,res)=>{
+app.post("/stripe/webhook", async (req,res)=>{
   let event;
 
   try {
+
+
     event = stripe.webhooks.constructEvent(
       req.body,
       req.headers["stripe-signature"],
