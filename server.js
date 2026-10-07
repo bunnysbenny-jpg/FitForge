@@ -136,7 +136,10 @@ async function requireActive(req,res,next){
   next();
 }
 app.use(express.urlencoded({extended:false}));
-app.use(express.json());
+app.use((req, res, next) => {
+  if (req.path === "/stripe/webhook") return next();
+  express.json()(req, res, next);
+});
 app.use(require("cookie-parser")());
 app.get("/", (req,res)=>res.send(publicPage));
 
