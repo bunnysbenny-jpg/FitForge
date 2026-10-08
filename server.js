@@ -302,7 +302,7 @@ app.get("/subscribe", requireLogin, (req,res)=>{
 });
 
 app.get("/workouts", requireActive, (req,res)=>{
-  res.send(workoutsPage);
+  res.sendFile(path.join(__dirname, "fitforge_workout_generator_expanded.html"));
 });
 app.post("/stripe/webhook", async (req,res)=>{
   let event;
