@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FitForge — Workout Generator Preview</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0b0d10;color:#f5f7fa}
+.wrap{max-width:900px;margin:auto;padding:24px 16px 50px}
+header{text-align:center;padding:18px 0 24px}h1{font-size:38px;margin:0 0 6px}header p{color:#aeb6c2;margin:0}
+.card{background:#14181e;border:1px solid #252b34;border-radius:18px;padding:20px;margin:14px 0;box-shadow:0 10px 30px #0003}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.field label{display:block;font-weight:700;margin-bottom:8px}.field select{width:100%;padding:13px;border-radius:11px;border:1px solid #343b46;background:#0d1014;color:#fff;font-size:15px}
+button{width:100%;padding:15px;border:0;border-radius:12px;background:#fff;color:#0b0d10;font-size:16px;font-weight:800;cursor:pointer;margin-top:16px}.secondary{background:#252b34;color:#fff}
+.hidden{display:none}.summary{display:flex;gap:10px;flex-wrap:wrap}.pill{background:#202631;padding:8px 11px;border-radius:999px;color:#dbe1e9;font-size:13px}
+.exercise{border:1px solid #2a313b;background:#101318;border-radius:14px;padding:16px;margin:10px 0}.exercise-media{display:flex;gap:12px;align-items:center;margin-top:13px;padding:10px;border-radius:12px;background:#0d1014;border:1px solid #242b35}.exercise-media img{width:110px;height:88px;object-fit:contain;border-radius:9px;background:#fff;flex:none}.exercise-how{font-size:12px;color:#aeb6c2;line-height:1.45}.exercise-how b{display:block;color:#fff;font-size:13px;margin-bottom:3px}.top{display:flex;justify-content:space-between;gap:10px}.name{font-weight:800;font-size:17px}.tag{font-size:12px;color:#aeb6c2}.details{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.detail{background:#191e26;padding:9px;border-radius:9px;text-align:center}.detail b{display:block}.detail span{font-size:11px;color:#9ca6b3}
+.small{font-size:12px;color:#8f98a5;margin-top:12px}
+@media(max-width:650px){.grid{grid-template-columns:1fr}.details{grid-template-columns:repeat(3,1fr)}h1{font-size:31px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><h1>YOUR WORKOUT</h1><p>Built around your goals. Different every time.</p></header>
+
+<section class="card">
+<div class="grid">
+<div class="field"><label>Goal</label><select id="goal">
+<option>Build Muscle</option><option>Strength</option><option>Fat Loss</option><option>Fitness</option><option>General Training</option>
+</select></div>
+<div class="field"><label>Workout Time</label><select id="time">
+<option value="15">15 minutes</option><option value="20">20 minutes</option><option value="30" selected>30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option>
+</select></div>
+<div class="field"><label>Muscle Group</label><select id="muscle">
+<option>Full Body</option><option>Chest</option><option>Back</option><option>Shoulders</option><option>Arms</option><option>Legs</option><option>Abs</option>
+</select></div>
+<div class="field"><label>Equipment</label><select id="equipment">
+<option>No Equipment</option><option>Bodyweight</option><option>Dumbbells</option><option>Barbell</option><option>Resistance Bands</option><option>Gym Machines</option><option>Mixed Equipment</option>
+</select></div>
+</div>
+<button onclick="generate()">Generate My Workout</button>
+</section>
+
+<section id="result" class="card hidden">
+<h2 id="title">Your Workout</h2>
+<div class="summary" id="summary"></div>
+<div id="exercises"></div>
+<button class="secondary" onclick="generate()">🔄 Generate Another Workout</button>
+<button class="secondary" onclick="shareWorkout()">📸 Share Your Workout</button>
+<p class="small">Exercise data by <a href="https://repdb.co" target="_blank" rel="noopener" style="color:#fff">RepDB</a>. FitForge workouts are general fitness information and are not medical advice.</p>
+</section>
+</div>
+
+<script>
+const noEquipment={
+Chest:["Push-Ups","Wide Push-Ups","Diamond Push-Ups","Knee Push-Ups","Decline Push-Ups","Incline Push-Ups","Archer Push-Ups","Staggered Push-Ups","Slow Tempo Push-Ups","Pause Push-Ups","Explosive Push-Ups","Pseudo Planche Push-Ups"],
+Back:["Superman","Swimmers","Reverse Snow Angels","Prone Y Raises","Prone T Raises","Bird Dog","Superman Hold","Cobra Hold","Floor W Raises","Reverse Plank","Back Extension Hold","Alternating Superman"],
+Shoulders:["Pike Push-Ups","Wall Handstand Hold","Plank Shoulder Taps","Bear Plank","Down-Dog Press","Arm Circles","Plank to Down Dog","Shoulder Taps","Scapular Push-Ups","Bear Crawl","Wall Lean Hold","Handstand Kick-Up Practice"],
+Arms:["Diamond Push-Ups","Close-Grip Push-Ups","Triceps Push-Ups","Bench-Free Triceps Extensions","Plank Up-Downs","Bear Crawl","Tiger Bend Push-Up","Isometric Push-Up Hold","Pseudo Planche Hold","Self-Resisted Biceps Curl","Towel Self-Resisted Curl"],
+Legs:["Bodyweight Squats","Pause Squats","Tempo Squats","Reverse Lunges","Forward Lunges","Walking Lunges","Split Squats","Bulgarian Split Squats","Curtsy Lunges","Cossack Squats","Single-Leg Sit-to-Stand","Glute Bridges","Single-Leg Glute Bridge","Hip Thrust Floor","Donkey Kicks","Fire Hydrants","Wall Sit","Jump Squats","Split Squat Jumps","Calf Raises","Single-Leg Calf Raises"],
+Abs:["Plank","Side Plank","Bicycle Crunches","Crunches","Reverse Crunches","Leg Raises","Dead Bug","Hollow Hold","Flutter Kicks","Mountain Climbers","Heel Taps","Toe Touches","V-Ups","Tuck-Ups","Plank Knee Drives","Bear Plank","Cross-Body Mountain Climbers"],
+Full:["Bodyweight Squats","Push-Ups","Reverse Lunges","Mountain Climbers","Glute Bridges","Plank","Pike Push-Ups","Bicycle Crunches","Burpees","Jump Squats","Bear Crawl","High Knees","Skater Jumps","Split Squats","Superman","Dead Bug"]
+};
+
+const db={
+Bodyweight:{
+Chest:["Push-Ups","Wide Push-Ups","Diamond Push-Ups","Decline Push-Ups","Knee Push-Ups","Tempo Push-Ups"],
+Back:["Superman","Reverse Snow Angels","Prone Y Raises","Bird Dog","Swimmer","Towel Rows"],
+Shoulders:["Pike Push-Ups","Wall Handstand Hold","Plank Shoulder Taps","Arm Circles","Bear Plank","Down-Dog Press"],
+Arms:["Diamond Push-Ups","Close-Grip Push-Ups","Bench/Chair Dips","Plank Up-Downs","Bodyweight Curls (Towel)","Isometric Curl Hold"],
+Legs:["Bodyweight Squats","Reverse Lunges","Walking Lunges","Bulgarian Split Squats","Glute Bridges","Jump Squats","Calf Raises","Wall Sit"],
+Abs:["Crunches","Bicycle Crunches","Leg Raises","Reverse Crunches","Plank","Side Plank","Mountain Climbers","Dead Bug"],
+Full:["Bodyweight Squats","Push-Ups","Reverse Lunges","Mountain Climbers","Glute Bridges","Plank","Pike Push-Ups","Bicycle Crunches","Burpees","Jump Squats"]
+},
+Dumbbells:{
+Chest:["Dumbbell Bench Press","Dumbbell Floor Press","Dumbbell Fly","Neutral-Grip Press","Squeeze Press"],
+Back:["One-Arm Dumbbell Row","Dumbbell Row","Renegade Row","Chest-Supported Row","Dumbbell Pullover"],
+Shoulders:["Dumbbell Shoulder Press","Arnold Press","Lateral Raise","Front Raise","Rear Delt Fly","Upright Row"],
+Arms:["Dumbbell Curl","Hammer Curl","Incline Curl","Overhead Triceps Extension","Triceps Kickback","Zottman Curl"],
+Legs:["Goblet Squat","Dumbbell Romanian Deadlift","Dumbbell Lunges","Bulgarian Split Squat","Dumbbell Step-Up","Dumbbell Calf Raise"],
+Abs:["Dumbbell Russian Twist","Weighted Crunch","Dumbbell Side Bend","Suitcase Hold","Dead Bug"],
+Full:["Goblet Squat","Dumbbell Bench Press","One-Arm Row","Dumbbell Shoulder Press","Romanian Deadlift","Hammer Curl","Dumbbell Lunges","Renegade Row"]
+},
+Barbell:{
+Chest:["Barbell Bench Press","Incline Barbell Press","Close-Grip Bench Press","Paused Bench Press"],
+Back:["Barbell Row","Pendlay Row","Rack Pull","Barbell Shrug"],
+Shoulders:["Overhead Press","Push Press","Barbell Front Raise","Behind-the-Back Shrug"],
+Arms:["Barbell Curl","Close-Grip Bench Press","EZ-Bar Curl","Skull Crushers","Reverse Curl"],
+Legs:["Back Squat","Front Squat","Romanian Deadlift","Barbell Lunge","Hip Thrust","Calf Raise"],
+Abs:["Barbell Rollout","Weighted Sit-Up","Landmine Rotation","Barbell Side Bend"],
+Full:["Back Squat","Bench Press","Barbell Row","Overhead Press","Romanian Deadlift","Barbell Lunge"]
+},
+Bands:{
+Chest:["Band Chest Press","Band Fly","Standing Band Press","Band Push-Up"],
+Back:["Band Row","Straight-Arm Pulldown","Band Lat Pulldown","Face Pull"],
+Shoulders:["Band Lateral Raise","Band Shoulder Press","Band Front Raise","Band Pull-Apart"],
+Arms:["Band Curl","Band Hammer Curl","Band Triceps Pushdown","Band Overhead Extension"],
+Legs:["Band Squat","Band Romanian Deadlift","Lateral Band Walk","Band Glute Bridge","Band Leg Curl"],
+Abs:["Band Crunch","Pallof Press","Band Woodchop","Kneeling Band Crunch"],
+Full:["Band Squat","Band Chest Press","Band Row","Band Shoulder Press","Band Romanian Deadlift","Band Curl","Pallof Press"]
+},
+Machines:{
+Chest:["Chest Press Machine","Pec Deck","Incline Chest Press","Cable Crossover"],
+Back:["Lat Pulldown","Seated Cable Row","Chest-Supported Row","Assisted Pull-Up"],
+Shoulders:["Shoulder Press Machine","Cable Lateral Raise","Reverse Pec Deck","Cable Front Raise"],
+Arms:["Cable Curl","Preacher Curl Machine","Triceps Pushdown","Overhead Cable Extension"],
+Legs:["Leg Press","Leg Extension","Leg Curl","Hack Squat","Calf Raise Machine","Hip Abductor"],
+Abs:["Cable Crunch","Ab Crunch Machine","Cable Woodchop","Captain's Chair Knee Raise"],
+Full:["Leg Press","Chest Press Machine","Lat Pulldown","Seated Cable Row","Shoulder Press Machine","Cable Crunch"]
+}
+};
+
+// Expanded exercise library: adds a large variety to every equipment category.
+const expanded = {
+Bodyweight:{
+Chest:["Decline Diamond Push-Ups","Wide Tempo Push-Ups","Close-Stand Push-Ups","Staggered Push-Ups","Archer Push-Ups","Typewriter Push-Ups","Spiderman Push-Ups","Shoulder Tap Push-Ups","Clap Push-Ups","Explosive Knee Push-Ups","Hindu Push-Ups","Dive Bomber Push-Ups","Uneven Push-Ups","One-Arm Incline Push-Up","Push-Up Plus","Hand-Release Push-Ups","Deficit Push-Ups","Pause Bottom Push-Ups","3-Second Eccentric Push-Ups","Knee Archer Push-Ups"],
+Back:["Prone Cobra","Prone W Raises","Prone T Raises","Prone A Raises","Superman Pulses","Swimmer Pulses","Reverse Plank Leg Lift","Bird Dog Row Motion","Quadruped Reach","Scapular Wall Slides","Floor Angels","Prone Lat Pull","Y-T-W Raises","Reverse Snow Angel Hold","Superman Alternating Arm","Cobra Pulses","Plank Drag Motion","Bear Plank Pull-Through Motion","Tabletop Reverse Fly Motion","Back Extension Pulses"],
+Shoulders:["Pike Push-Up Negatives","Pike Push-Up Hold","Wall Walks","Handstand Hold","Wall Shoulder Taps","Plank to Pike","Down-Dog Shoulder Press","Bear Shoulder Taps","Bear Hold","Scapular Push-Up Plus","Prone Y Raise","Prone W Raise","Wall Slides","Arm Circle Pulses","Cross-Body Shoulder Taps","Plank Reach","Side Plank Reach","Push-Up to Down Dog","Dive Bomber","Wall Lean Shoulder Hold"],
+Arms:["Diamond Push-Up Hold","Close-Grip Push-Up Tempo","Triceps Push-Up Pause","Tiger Bend Push-Up","Bodyweight Triceps Extension","Kneeling Bodyweight Triceps Extension","Towel Curl Isometric","Towel Hammer Curl Isometric","Self-Resisted Curl Slow","Self-Resisted Hammer Curl","Self-Resisted Triceps Press","Plank Triceps Extension","Bear Crawl","Crab Reach","Crab Triceps Press","Push-Up Bottom Hold","Diamond Push-Up Pulses","Close-Grip Knee Push-Ups","Towel Curl 90-Degree Hold","Towel Triceps Pressdown Isometric"],
+Legs:["Tempo Squat","3-Second Squat","Squat Hold","1.5-Rep Squat","Narrow Squat","Wide Squat","Sumo Squat","Reverse Lunge to Knee Drive","Forward Lunge to Knee Drive","Lateral Lunge","Lateral Lunge Pulses","Curtsy Lunge Pulses","Split Squat Pulses","Bulgarian Split Squat Pulses","Single-Leg Squat to Chair","Skater Squat","Shrimp Squat","Single-Leg Glute Bridge Hold","Glute Bridge March","Frog Pumps","Hip Bridge Pulses","Donkey Kick Pulses","Fire Hydrant Pulses","Wall Sit Calf Raise","Seated Calf Raise Bodyweight"],
+Abs:["Plank Reach","Plank Shoulder Tap","Plank Hip Dips","RKC Plank","Long-Lever Plank","Reverse Plank","Side Plank Hip Lift","Side Plank Knee Drive","Dead Bug Hold","Dead Bug Toe Tap","Hollow Body Rock","Hollow Body Flutter","Tuck Crunch","Cross-Body Crunch","Heel Tap Crunch","Slow Mountain Climber","Plank Jack","Bear Crawl Knee Drive","Leg Lowering","Scissor Kicks","Jackknife Sit-Up","V-Sit Hold","Seated Knee Tuck","Lying Knee Tuck","Toe Reach Crunch"],
+Full:["Squat to Reach","Reverse Lunge to Knee Drive","Push-Up to Down Dog","Bear Crawl","Crab Walk","Inchworm","Walkout to Plank","Sprawl","Burpee to Squat","Squat Thrust","Broad Jump","Skater Hop","Lateral Shuffle","High Knees","Butt Kicks","Fast Feet","Mountain Climber Sprint","Plank Jack","Beast Hold","Bear Plank","Cossack Squat","Push-Up to Shoulder Tap","Lunge to Reach","Squat Pulse","Half Burpee"]
+},
+Dumbbells:{
+Chest:["Flat Dumbbell Press","Incline Dumbbell Press","Decline Dumbbell Press","Alternating Dumbbell Press","Single-Arm Floor Press","Dumbbell Crush Press","Dumbbell Squeeze Press","Neutral-Grip Dumbbell Press","Dumbbell Pullover","Alternating Floor Press","Dumbbell Fly on Floor","Dumbbell Fly on Bench","Incline Dumbbell Fly","Decline Dumbbell Fly","Dumbbell Press 1.5 Rep","Dumbbell Press Pause","Single-Arm Dumbbell Press","Dumbbell Hex Press","Dumbbell Around-the-World","Dumbbell Push-Up Row Combo"],
+Back:["Chest-Supported Dumbbell Row","Incline Dumbbell Row","Two-Arm Dumbbell Row","Alternating Dumbbell Row","Elbow-Out Dumbbell Row","Dumbbell Seal Row","Dumbbell Pullover","Dumbbell Rear Delt Row","Single-Arm Bench Row","Dumbbell Meadows-Style Row","Dumbbell Dead Row","Renegade Row","Renegade Row Hold","Dumbbell Shrug","Dumbbell High Pull","Dumbbell Farmer Carry","Dumbbell Suitcase Carry","Dumbbell Row Pause","Dumbbell Row 1.5 Rep","Dumbbell Reverse Fly"],
+Shoulders:["Seated Dumbbell Press","Standing Dumbbell Press","Arnold Press","Alternating Arnold Press","Neutral-Grip Press","Dumbbell Z-Press","Single-Arm Dumbbell Press","Lateral Raise","Lean-Away Lateral Raise","Partial Lateral Raise","Front Raise","Alternating Front Raise","Rear Delt Fly","Chest-Supported Rear Delt Fly","Bent-Over Rear Delt Raise","Dumbbell Y Raise","Dumbbell W Raise","Dumbbell Cuban Press","Dumbbell Upright Row","Dumbbell High Pull"],
+Arms:["Alternating Dumbbell Curl","Seated Dumbbell Curl","Incline Dumbbell Curl","Concentration Curl","Spider Curl","Cross-Body Hammer Curl","Reverse Dumbbell Curl","Zottman Curl","Drag Curl","Dumbbell Curl Hold","Alternating Curl Hold","Dumbbell Hammer Curl","Overhead Dumbbell Triceps Extension","Single-Arm Overhead Extension","Dumbbell Skull Crusher","Dumbbell Tate Press","Dumbbell Floor Skull Crusher","Dumbbell Triceps Kickback","Cross-Body Triceps Extension","Dumbbell Close-Grip Press"],
+Legs:["Dumbbell Front Squat","Dumbbell Sumo Squat","Dumbbell Split Squat","Dumbbell Reverse Lunge","Dumbbell Forward Lunge","Dumbbell Walking Lunge","Dumbbell Lateral Lunge","Dumbbell Curtsy Lunge","Dumbbell Step-Back Lunge","Dumbbell Goblet Squat Pause","Dumbbell Romanian Deadlift","Single-Leg Dumbbell RDL","Dumbbell Stiff-Leg Deadlift","Dumbbell Sumo RDL","Dumbbell Hip Thrust","Dumbbell Glute Bridge","Dumbbell Step-Up","Dumbbell Lateral Step-Up","Dumbbell Calf Raise","Single-Leg Dumbbell Calf Raise"],
+Abs:["Dumbbell Dead Bug","Dumbbell Pullover Dead Bug","Dumbbell Sit-Up","Dumbbell Crunch","Dumbbell Toe Reach","Dumbbell Russian Twist","Dumbbell V-Sit","Dumbbell V-Up","Dumbbell Leg Raise","Dumbbell Hollow Hold","Dumbbell Side Bend","Dumbbell Suitcase March","Dumbbell Plank Row","Renegade Row Hold","Dumbbell Woodchop","Dumbbell Around-the-World Core","Weighted Dead Bug","Weighted Heel Tap","Dumbbell Seated Knee Tuck","Dumbbell Overhead March"],
+Full:["Dumbbell Thruster","Dumbbell Clean","Dumbbell Clean and Press","Dumbbell Snatch","Alternating Dumbbell Snatch","Dumbbell Devil Press","Dumbbell Man Maker","Dumbbell Squat to Press","Dumbbell Reverse Lunge to Curl","Dumbbell Lunge to Press","Dumbbell Romanian Deadlift to Row","Dumbbell Squat to Row","Dumbbell Renegade Row to Push-Up","Dumbbell Farmer Walk","Dumbbell Front Rack Carry","Dumbbell High Pull","Dumbbell Swing","Dumbbell Push Press","Dumbbell Complex","Dumbbell Burpee" ]
+},
+Barbell:{
+Chest:["Flat Barbell Bench Press","Incline Barbell Bench Press","Decline Barbell Bench Press","Close-Grip Bench Press","Wide-Grip Bench Press","Paused Bench Press","Tempo Bench Press","Spoto Press","Pin Press","Floor Press","Larsen Press","Barbell Guillotine Press","Reverse-Grip Bench Press","Incline Close-Grip Press","Bench Press 1.5 Rep","Barbell Pullover","Barbell JM Press","Feet-Up Bench Press","Paused Incline Press","Competition-Style Bench Press"],
+Back:["Barbell Bent-Over Row","Pendlay Row","Underhand Barbell Row","Wide-Grip Barbell Row","Close-Grip Barbell Row","Yates Row","Seal Row","Barbell T-Bar Row","Landmine Row","Meadows Row","Rack Pull","Snatch-Grip Rack Pull","Barbell Shrug","Behind-Back Barbell Shrug","Barbell High Pull","Barbell Good Morning","Deficit Barbell Row","Paused Barbell Row","Barbell Row from Blocks","Barbell Romanian Deadlift Row"],
+Shoulders:["Strict Overhead Press","Seated Barbell Press","Push Press","Behind-Neck Press","Bradford Press","Z-Press","Landmine Press","Single-Arm Landmine Press","Barbell Front Raise","Barbell High Pull","Barbell Upright Row","Barbell Cuban Press","Barbell Around-the-World","Barbell Overhead Hold","Push Jerk","Split Jerk","Power Jerk","Pin Press Overhead","Paused Overhead Press","Tempo Overhead Press"],
+Arms:["Standing Barbell Curl","EZ-Bar Curl","Close-Grip EZ Curl","Reverse Barbell Curl","Drag Curl","Preacher Barbell Curl","Spider Barbell Curl","21s Barbell Curl","Barbell Curl Hold","Seated Barbell Curl","Skull Crusher","EZ-Bar Skull Crusher","Close-Grip Bench Press","JM Press","Barbell Triceps Extension","Rolling Barbell Triceps Extension","Overhead Barbell Extension","Barbell Tate Press","Floor Skull Crusher","Paused Close-Grip Press"],
+Legs:["Back Squat","Front Squat","Pause Back Squat","Tempo Back Squat","Box Squat","High-Bar Squat","Low-Bar Squat","Zercher Squat","Hack Squat with Barbell","Barbell Split Squat","Barbell Reverse Lunge","Barbell Walking Lunge","Barbell Lateral Lunge","Barbell Bulgarian Split Squat","Barbell Romanian Deadlift","Stiff-Leg Barbell Deadlift","Sumo Deadlift","Conventional Deadlift","Deficit Deadlift","Barbell Hip Thrust"],
+Abs:["Barbell Rollout","Barbell Ab Rollout","Weighted Sit-Up","Barbell Sit-Up","Landmine Rotation","Landmine Anti-Rotation","Barbell Side Bend","Barbell Overhead Hold","Front Rack Carry","Barbell Suitcase Hold","Barbell Dead Bug Hold","Barbell Plank","Barbell Plank Drag","Barbell Russian Twist","Barbell V-Sit","Barbell Toe Reach","Barbell Hollow Hold","Landmine Crunch","Barbell Good Morning Core","Paused Rollout"],
+Full:["Barbell Thruster","Barbell Clean","Hang Power Clean","Power Clean","Clean and Press","Clean and Jerk","Push Press","Push Jerk","Barbell Snatch","Hang Snatch","Barbell Complex","Bear Complex","Barbell Front Squat to Press","Barbell Squat to Row","Barbell Deadlift to Row","Barbell High Pull to Squat","Barbell Lunge to Press","Barbell Romanian Deadlift to Row","Barbell Clean Pull","Barbell Muscle Clean"]
+},
+Bands:{
+Chest:["Standing Band Chest Press","Single-Arm Band Press","Band Incline Press","Band Decline Press","Band Fly","Low-to-High Band Fly","High-to-Low Band Fly","Band Squeeze Press","Band Around-the-World","Band Chest Press Hold","Band Press Pulses","Band Push-Up","Band Assisted Push-Up","Band Resisted Push-Up","Band Crossover Press","Split-Stance Band Press","Half-Kneeling Band Press","Band Chest Press 1.5 Rep","Band Fly Hold","Band Isometric Press"],
+Back:["Seated Band Row","Standing Band Row","Single-Arm Band Row","High Band Row","Low Band Row","Band Lat Pulldown","Kneeling Band Lat Pulldown","Straight-Arm Band Pulldown","Band Face Pull","Band Pull-Apart","Reverse-Grip Band Row","Band High Row","Band Row Hold","Band Row Pulses","Band Good Morning","Band Deadlift","Band Shrug","Band Rear Delt Pull","Band Scapular Row","Band Pullover"],
+Shoulders:["Band Shoulder Press","Single-Arm Band Press","Band Arnold Press","Band Lateral Raise","Single-Arm Lateral Raise","Band Front Raise","Alternating Front Raise","Band Rear Delt Fly","Band Face Pull","Band Pull-Apart","Band Y Raise","Band W Raise","Band Upright Row","Band High Pull","Band Cuban Press","Band Overhead Hold","Band Press Pulses","Band Lateral Hold","Band Front Hold","Band Around-the-World"],
+Arms:["Band Biceps Curl","Alternating Band Curl","Single-Arm Band Curl","Band Hammer Curl","Band Reverse Curl","Band Concentration Curl","Band Curl Hold","Band Curl Pulses","Band Drag Curl","Band Preacher Curl","Band Triceps Pushdown","Single-Arm Band Pushdown","Band Overhead Extension","Band Cross-Body Extension","Band Triceps Kickback","Band Pressdown Hold","Band Pressdown Pulses","Band Close-Grip Press","Band Tate Press","Band Triceps Extension"],
+Legs:["Band Squat","Band Front Squat","Band Sumo Squat","Band Pause Squat","Band Pulse Squat","Band Reverse Lunge","Band Forward Lunge","Band Lateral Lunge","Band Curtsy Lunge","Band Split Squat","Band Bulgarian Split Squat","Band Romanian Deadlift","Band Good Morning","Band Deadlift","Band Hip Thrust","Band Glute Bridge","Band Frog Pump","Band Leg Curl","Band Standing Leg Curl","Band Lateral Walk"],
+Abs:["Band Crunch","Kneeling Band Crunch","Standing Band Crunch","Band Pallof Press","Half-Kneeling Pallof Press","Band Woodchop","High-to-Low Band Chop","Low-to-High Band Chop","Band Russian Twist","Band Dead Bug","Band Anti-Rotation Hold","Band Side Bend","Band Plank Row","Band Plank Hold","Band Mountain Climber","Band Bicycle Crunch","Band Leg Raise","Band Hollow Hold","Band V-Sit","Band Sit-Up"],
+Full:["Band Thruster","Band Squat to Press","Band Clean","Band Clean and Press","Band Row to Squat","Band Reverse Lunge to Press","Band Squat to Row","Band Deadlift to Row","Band Good Morning to Row","Band Push-Up to Row","Band Resisted Burpee","Band Lateral Walk to Squat","Band High Pull","Band Front Rack Squat","Band Complex","Band Press to Lunge","Band Hinge to Row","Band Curl to Press","Band Pull-Apart to Squat","Band Mountain Climber"]
+},
+Machines:{
+Chest:["Chest Press Machine","Incline Chest Press Machine","Decline Chest Press Machine","Horizontal Chest Press","Pec Deck","Cable Fly","Low Cable Fly","High Cable Fly","Single-Arm Cable Press","Single-Arm Cable Fly","Cable Crossover","Cable Chest Press","Cable Press Hold","Machine Chest Press Pause","Machine Chest Press 1.5 Rep","Plate-Loaded Chest Press","Hammer Strength Chest Press","Incline Hammer Press","Cable Squeeze Press","Cable Press Pulses"],
+Back:["Lat Pulldown","Wide-Grip Lat Pulldown","Close-Grip Lat Pulldown","Neutral-Grip Pulldown","Underhand Pulldown","Single-Arm Lat Pulldown","Seated Cable Row","Close-Grip Cable Row","Wide-Grip Cable Row","Single-Arm Cable Row","Chest-Supported Row Machine","Machine High Row","Machine Low Row","Assisted Pull-Up","Straight-Arm Cable Pulldown","Cable Pullover","Face Pull","Cable Rear Delt Row","Machine Pullover","Cable Row Hold"],
+Shoulders:["Shoulder Press Machine","Machine Lateral Raise","Cable Lateral Raise","Single-Arm Cable Lateral Raise","Cable Front Raise","Cable Rear Delt Fly","Reverse Pec Deck","Cable Face Pull","Cable Upright Row","Cable Y Raise","Machine Rear Delt Raise","Machine Shoulder Press Pause","Machine Shoulder Press 1.5 Rep","Cable Cuban Press","Cable High Pull","Landmine Press","Single-Arm Landmine Press","Cable Overhead Hold","Cable Lateral Hold","Machine Shoulder Press Pulses"],
+Arms:["Cable Biceps Curl","Single-Arm Cable Curl","Rope Cable Curl","EZ-Bar Cable Curl","Preacher Curl Machine","Machine Biceps Curl","Cable Hammer Curl","Cable Reverse Curl","Cable Curl Hold","Cable Curl Pulses","Triceps Pushdown","Rope Triceps Pushdown","Single-Arm Triceps Pushdown","Overhead Cable Extension","Rope Overhead Extension","Cable Cross-Body Extension","Triceps Extension Machine","Assisted Dip Machine","Cable Triceps Kickback","Cable Pressdown Hold"],
+Legs:["Leg Press","45-Degree Leg Press","Hack Squat Machine","Pendulum Squat","Smith Machine Squat","Smith Machine Front Squat","Leg Extension","Single-Leg Leg Extension","Seated Leg Curl","Lying Leg Curl","Standing Leg Curl","Glute Drive Machine","Hip Thrust Machine","Hip Abductor Machine","Hip Adductor Machine","Calf Raise Machine","Seated Calf Raise","Smith Machine Lunge","Smith Machine Split Squat","Smith Machine Romanian Deadlift"],
+Abs:["Cable Crunch","Kneeling Cable Crunch","Standing Cable Crunch","Ab Crunch Machine","Machine Ab Crunch Pause","Cable Woodchop","High-to-Low Cable Chop","Low-to-High Cable Chop","Pallof Press","Cable Anti-Rotation Hold","Captain's Chair Knee Raise","Captain's Chair Leg Raise","Hanging Knee Raise","Hanging Leg Raise","Cable Russian Twist","Cable Side Bend","Cable Dead Bug","Cable Pallof March","Ab Wheel Rollout","Cable V-Sit"],
+Full:["Cable Squat to Row","Cable Squat to Press","Cable Reverse Lunge to Row","Cable Lunge to Press","Cable Deadlift to Row","Cable Clean and Press","Cable High Pull","Cable Thruster","Landmine Squat to Press","Landmine Reverse Lunge","Landmine Row","Landmine Press","Smith Machine Squat to Press","Smith Machine Lunge to Press","Machine Row to Squat","Cable Burpee","Cable Complex","Sled Push","Sled Drag","Assisted Pull-Up to Knee Raise"]
+}
+};
+for(const eq of Object.keys(expanded)) for(const muscle of Object.keys(expanded[eq])) db[eq][muscle]=[...new Set([...(db[eq]?.[muscle]||[]),...expanded[eq][muscle]])];
+// Keep a larger selection at longer durations and avoid duplicate exercises.
+
+function shuffle(a){return [...a].sort(()=>Math.random()-0.5)}
+function pick(arr,n){return shuffle(arr).slice(0,Math.min(n,arr.length))}
+function reps(goal){
+ if(goal==="Strength") return ["4–6 reps","5–8 reps","6–8 reps"][Math.floor(Math.random()*3)];
+ if(goal==="Fat Loss"||goal==="Fitness") return ["10–15 reps","12–20 reps","30 sec"][Math.floor(Math.random()*3)];
+ return ["8–12 reps","10–12 reps","10–15 reps"][Math.floor(Math.random()*3)];
+}
+let repdbExercises = null;
+let repdbLoading = null;
+
+async function loadRepDB(){
+  if(repdbExercises) return repdbExercises;
+  if(repdbLoading) return repdbLoading;
+  repdbLoading = fetch("https://exercise-dataset.com/exercises.json")
+    .then(r=>{ if(!r.ok) throw new Error("RepDB unavailable"); return r.json(); })
+    .then(data=>{ repdbExercises = Array.isArray(data) ? data : (Array.isArray(data.exercises) ? data.exercises : []); return repdbExercises; })
+    .catch(()=>{ repdbExercises = []; return repdbExercises; });
+  return repdbLoading;
+}
+
+function norm(s){return String(s||"").toLowerCase().replace(/&/g,"and").replace(/[^a-z0-9]+/g," ").trim();}
+function exerciseMatchesMuscle(ex, muscle){
+  if(muscle === "Full Body") return String(ex.body_part||"").toLowerCase()==="full_body" || (ex.primary_muscles||[]).length>=3;
+  const body=norm(ex.body_part);
+  const muscles=[...(ex.primary_muscles||[]),...(ex.secondary_muscles||[])].map(norm).join(" ");
+  const wanted={Chest:["chest","pector"],Back:["back","latissimus","rhomboid","trapezius"],Shoulders:["shoulder","deltoid"],Arms:["arm","biceps","triceps","brachial"],Legs:["leg","quad","hamstring","glute","calf"],Abs:["ab","core","oblique"]}[muscle]||[];
+  return wanted.some(w=>body.includes(w)||muscles.includes(w));
+}
+function exerciseMatchesEquipment(ex, eq){
+  const equipment=norm(ex.equipment);
+  const hasEquipment=equipment.length>0;
+  if(eq==="No Equipment" || eq==="Bodyweight") return !hasEquipment;
+  if(eq==="Dumbbells") return equipment.includes("dumbbell");
+  if(eq==="Barbell") return equipment.includes("barbell") || equipment.includes("ez bar") || equipment.includes("trap bar");
+  if(eq==="Resistance Bands") return equipment.includes("resistance band") || equipment.includes("loop band") || equipment.includes("band");
+  if(eq==="Gym Machines") {
+    const machineTerms=["machine","cable","smith","leg press","leg curl","leg extension","hack squat","pec deck","pulldown","row machine","press machine","ab crunch machine","calf raise machine","hip abduction","hip adduction","assisted pull up"];
+    return machineTerms.some(term=>equipment.includes(term));
+  }
+  if(eq==="Mixed Equipment") return true;
+  return false;
+}
+function imageUrl(ex, pose="start"){
+  const flat=ex && ex.images && ex.images.flat;
+  if(!flat) return "";
+  const path=flat[pose] || flat.main || flat.start || flat.peak || "";
+  return path ? "https://exercise-dataset.com/"+path.replace(/^\//,"") : "";
+}
+function fallbackCandidates(ex){
+  const flat=ex && ex.images && ex.images.flat;
+  if(!flat) return [];
+  return [flat.peak,flat.main,flat.start].filter(Boolean).map(x=>"https://exercise-dataset.com/"+x.replace(/^\//,""));
+}
+
+async function generate(){
+  const goal=document.getElementById("goal").value, time=+document.getElementById("time").value;
+  const muscle=document.getElementById("muscle").value, eq=document.getElementById("equipment").value;
+  const result=document.getElementById("result"), exercisesEl=document.getElementById("exercises");
+  result.classList.remove("hidden");
+  document.getElementById("title").textContent=`${muscle} Workout`;
+  document.getElementById("summary").innerHTML=`<span class="pill">🎯 ${goal}</span><span class="pill">⏱️ ${time} min</span><span class="pill">💪 ${muscle}</span><span class="pill">🏋️ ${eq}</span>`;
+  exercisesEl.innerHTML='<div class="small" style="padding:16px;text-align:center">Building your workout and matching every exercise to its equipment and demonstration image…</div>';
+
+  const catalog=await loadRepDB();
+  let candidates=catalog.filter(ex=>exerciseMatchesEquipment(ex,eq) && exerciseMatchesMuscle(ex,muscle) && ex.images && ex.images.flat);
+  if(goal==="Build Muscle") candidates.sort((a,b)=>(b.goals||[]).includes("hypertrophy")-(a.goals||[]).includes("hypertrophy"));
+  if(goal==="Strength") candidates.sort((a,b)=>(b.goals||[]).includes("strength")-(a.goals||[]).includes("strength"));
+  if(goal==="Fat Loss" || goal==="Fitness") candidates.sort((a,b)=>(b.goals||[]).includes("endurance")-(a.goals||[]).includes("endurance"));
+
+  if(!candidates.length){
+    exercisesEl.innerHTML='<div class="exercise"><div class="name">Not enough verified exercises</div><div class="exercise-how" style="margin-top:8px">There are not enough exercises in the verified library for this exact combination yet. Try a different muscle group or equipment option. FitForge will never substitute an exercise with the wrong equipment.</div></div>';
+    return;
+  }
+
+  const countByTime={15:4,20:5,30:7,45:9,60:11};
+  // Prefer familiar beginner-friendly exercises when they fit the selected filters.
+  // The exercise still must come from the verified RepDB record, so its photo/equipment stay accurate.
+  const easyNames=["push up","knee push up","squat","bodyweight squat","lunge","reverse lunge","glute bridge","plank","side plank","crunch","sit up","mountain climber","jumping jack","burpee","calf raise","wall sit","bird dog","dead bug"];
+  const easyScore=ex=>{
+    const n=norm(ex.name_en);
+    const idx=easyNames.findIndex(x=>n.includes(x));
+    return idx===-1 ? 0 : easyNames.length-idx+10;
+  };
+  candidates.sort((a,b)=>easyScore(b)-easyScore(a));
+  const count=countByTime[time]||5;
+  const easy=candidates.filter(ex=>easyScore(ex)>0);
+  const chosen=pick(easy.slice(0, Math.min(easy.length, Math.ceil(count/2))), Math.min(Math.ceil(count/2), easy.length));
+  const remaining=candidates.filter(ex=>!chosen.includes(ex));
+  chosen.push(...pick(remaining, count-chosen.length));
+  const sets=goal==="Strength"?"4 sets":goal==="Fat Loss"?"3 sets":"3 sets";
+  document.getElementById("exercises").innerHTML=chosen.map((ex,i)=>{
+    const target=reps(goal), rest=goal==="Strength"?"90–120":"45–75";
+    const img=imageUrl(ex,"start"); const fallbacks=fallbackCandidates(ex).filter(u=>u!==img);
+    const instructions=(ex.instructions_en||[]).slice(0,2).join(" ") || ex.description_en || "Use controlled movement and good posture.";
+    const equipmentLabel=ex.equipment ? ex.equipment.replace(/_/g," ").replace(/\b\w/g,m=>m.toUpperCase()) : "No equipment";
+    const fallbackAttr=JSON.stringify(fallbacks).replace(/"/g,'&quot;');
+    return `<div class="exercise"><div class="top"><div><div class="name">${i+1}. ${ex.name_en}</div><div class="tag">${sets}</div></div><div class="tag">${target}</div></div><div class="exercise-media"><img src="${img}" alt="How to do ${ex.name_en}" data-fallbacks="${fallbackAttr}" onerror="swapExerciseImage(this)"><div class="exercise-how"><b>How to do it</b>${instructions}<div style="margin-top:7px;color:#fff;font-size:11px">Equipment: ${equipmentLabel}</div></div></div><div class="details"><div class="detail"><b>${sets.split(" ")[0]}</b><span>Sets</span></div><div class="detail"><b>${target}</b><span>Target</span></div><div class="detail"><b>${rest}s</b><span>Rest</span></div></div></div>`;
+  }).join("");
+  window.scrollTo({top:document.getElementById("result").offsetTop-10,behavior:"smooth"});
+}
+
+function swapExerciseImage(img){
+  let list=[]; try{list=JSON.parse(img.dataset.fallbacks||"[]")}catch(e){}
+  const next=list.shift();
+  img.dataset.fallbacks=JSON.stringify(list);
+  if(next){img.src=next;return;}
+  img.onerror=null;
+  img.style.display="none";
+}
+
+async function shareWorkout(){
+  const result=document.getElementById("result");
+  if(result.classList.contains("hidden")) return;
+  const cards=[...document.querySelectorAll("#exercises .exercise")];
+  const goal=document.getElementById("goal").value;
+  const time=document.getElementById("time").value;
+  const muscle=document.getElementById("muscle").value;
+  const equipment=document.getElementById("equipment").value;
+  const items=cards.map((card,i)=>{
+    const name=card.querySelector(".name")?.textContent?.replace(/^\d+\.\s*/,"")||`Exercise ${i+1}`;
+    const details=[...card.querySelectorAll(".detail")].map(x=>x.innerText.replace(/\n/g," "));
+    return {name,details};
+  });
+  const canvas=document.createElement("canvas");
+  canvas.width=1080; canvas.height=1920;
+  const ctx=canvas.getContext("2d");
+  ctx.fillStyle="#0b0d10"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#ffffff"; ctx.font="800 64px system-ui"; ctx.fillText("YOUR WORKOUT",70,110);
+  ctx.fillStyle="#aeb6c2"; ctx.font="400 30px system-ui"; ctx.fillText(`${goal} • ${time} min • ${muscle}`,70,160);
+  ctx.fillText(`Equipment: ${equipment}`,70,205);
+  let y=285;
+  items.forEach((item,i)=>{
+    if(y>1750) return;
+    ctx.fillStyle="#14181e"; ctx.fillRect(55,y-50,970,150);
+    ctx.fillStyle="#ffffff"; ctx.font="800 34px system-ui"; ctx.fillText(`${i+1}. ${item.name}`,85,y);
+    ctx.fillStyle="#cbd2dc"; ctx.font="500 25px system-ui"; ctx.fillText(item.details.join("   "),85,y+48);
+    y+=175;
+  });
+  ctx.fillStyle="#8f98a5"; ctx.font="500 22px system-ui"; ctx.fillText("FitForge • General fitness information",70,1850);
+  canvas.toBlob(async blob=>{
+    if(!blob) return;
+    const file=new File([blob],"fitforge-workout-story.png",{type:"image/png"});
+    try{
+      if(navigator.share && (!navigator.canShare || navigator.canShare({files:[file]}))){
+        await navigator.share({title:"My FitForge Workout",files:[file]});
+      }else{
+        const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="fitforge-workout-story.png"; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+      }
+    }catch(e){
+      if(e && e.name!=="AbortError"){
+        const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="fitforge-workout-story.png"; a.click();
+      }
+    }
+  },"image/png");
+}
+</script>
+</body>
+</html>
